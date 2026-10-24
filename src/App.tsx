@@ -11,6 +11,8 @@ import { Dashboard } from './components/Dashboard';
 import { ManagerApprovalView } from './components/ManagerApprovalView';
 import { ReportHistory } from './components/ReportHistory';
 import { AdminTemplateEditor } from './components/AdminTemplateEditor';
+import { OutletManagement } from './components/OutletManagement';
+import { EmployeeManagement } from './components/EmployeeManagement';
 import { ReportPreviewModal } from './components/ReportPreviewModal';
 import { EmployeeProfileModal } from './components/EmployeeProfileModal';
 import { NotificationsModal } from './components/NotificationsModal';
@@ -41,6 +43,8 @@ const AppContent: React.FC = () => {
         {activeTab === 'approvals' && <ManagerApprovalView />}
         {activeTab === 'history' && <ReportHistory />}
         {activeTab === 'templates' && <AdminTemplateEditor />}
+        {activeTab === 'outlets' && <OutletManagement />}
+        {activeTab === 'employees' && <EmployeeManagement />}
       </main>
 
       {/* Global Modals */}

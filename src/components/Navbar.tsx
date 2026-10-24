@@ -12,7 +12,8 @@ import {
   LogOut,
   ShieldCheck,
   Camera,
-  Mail
+  Mail,
+  Users
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
@@ -136,6 +137,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               <History className="w-4 h-4 text-purple-400" />
               <span>Report Archive</span>
             </button>
+
+            {/* Outlets (for admins and managers) */}
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+              <button
+                onClick={() => setActiveTab('outlets')}
+                className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 flex items-center gap-2 ${
+                  activeTab === 'outlets'
+                    ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                <Building2 className="w-4 h-4 text-amber-400" />
+                <span>Outlets</span>
+              </button>
+            )}
+
+            {/* Employees (for admins and managers) */}
+            {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+              <button
+                onClick={() => setActiveTab('employees')}
+                className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 flex items-center gap-2 ${
+                  activeTab === 'employees'
+                    ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>Employees</span>
+              </button>
+            )}
 
             {currentUser.role === 'admin' && (
               <button
@@ -273,14 +304,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Bottom Navigation Bar (Natural thumb-zone reach, <=15% height) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-neutral-950/95 backdrop-blur-md border-t border-neutral-800 px-2 py-1.5 safe-area-pb">
-        <div className="grid grid-cols-4 items-center gap-1">
+        <div className="grid grid-cols-5 items-center gap-1">
           <button
             onClick={() => setActiveTab('checklist')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-colors ${
               activeTab === 'checklist' ? 'text-amber-400 font-semibold' : 'text-neutral-400'
             }`}
           >
-            <ClipboardCheck className="w-5 h-5 mb-0.5" />
+            <ClipboardCheck className="w-4 h-4 mb-0.5" />
             <span className="text-[10px] tracking-tight">Checklist</span>
           </button>
 
@@ -290,18 +321,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               activeTab === 'dashboard' ? 'text-blue-400 font-semibold' : 'text-neutral-400'
             }`}
           >
-            <LayoutDashboard className="w-5 h-5 mb-0.5" />
+            <LayoutDashboard className="w-4 h-4 mb-0.5" />
             <span className="text-[10px] tracking-tight">Hub</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('approvals')}
+            onClick={() => setActiveTab('outlets')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-colors ${
-              activeTab === 'approvals' ? 'text-emerald-400 font-semibold' : 'text-neutral-400'
+              activeTab === 'outlets' ? 'text-amber-400 font-semibold' : 'text-neutral-400'
             }`}
           >
-            <CheckSquare className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Review</span>
+            <Building2 className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Outlets</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-colors ${
+              activeTab === 'employees' ? 'text-emerald-400 font-semibold' : 'text-neutral-400'
+            }`}
+          >
+            <Users className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Staff</span>
           </button>
 
           <button
@@ -310,7 +351,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               activeTab === 'history' ? 'text-purple-400 font-semibold' : 'text-neutral-400'
             }`}
           >
-            <History className="w-5 h-5 mb-0.5" />
+            <History className="w-4 h-4 mb-0.5" />
             <span className="text-[10px] tracking-tight">Archive</span>
           </button>
         </div>

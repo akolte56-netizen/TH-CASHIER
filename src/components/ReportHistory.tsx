@@ -32,6 +32,7 @@ export const ReportHistory: React.FC = () => {
   // Search & Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOutlet, setSelectedOutlet] = useState('all');
+  const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [selectedShift, setSelectedShift] = useState('all');
   const [selectedChecklistType, setSelectedChecklistType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -52,15 +53,16 @@ export const ReportHistory: React.FC = () => {
         r.outletName.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesOutlet = selectedOutlet === 'all' || r.outletId === selectedOutlet;
+      const matchesEmployee = selectedEmployee === 'all' || r.cashierId === selectedEmployee || r.cashierEmployeeId === selectedEmployee;
       const matchesShift = selectedShift === 'all' || r.shiftType === selectedShift;
       const matchesType = selectedChecklistType === 'all' || r.checklistType === selectedChecklistType;
       const matchesStatus = selectedStatus === 'all' || r.approvalStatus === selectedStatus;
       const matchesDate = !selectedDate || r.date === selectedDate;
       const matchesVariance = !selectedVarianceOnly || (r.cashReconciliation && Math.abs(r.cashReconciliation.variance) > 0.05);
 
-      return matchesSearch && matchesOutlet && matchesShift && matchesType && matchesStatus && matchesDate && matchesVariance;
+      return matchesSearch && matchesOutlet && matchesEmployee && matchesShift && matchesType && matchesStatus && matchesDate && matchesVariance;
     });
-  }, [reports, searchQuery, selectedOutlet, selectedShift, selectedChecklistType, selectedStatus, selectedDate, selectedVarianceOnly]);
+  }, [reports, searchQuery, selectedOutlet, selectedEmployee, selectedShift, selectedChecklistType, selectedStatus, selectedDate, selectedVarianceOnly]);
 
   const handleDownload = async (r: ChecklistReport) => {
     await generateChecklistPDF(r);
@@ -157,6 +159,19 @@ export const ReportHistory: React.FC = () => {
               <option value="submitted">Submitted</option>
               <option value="returned_for_correction">Returned</option>
               <option value="draft">Draft</option>
+            </select>
+
+            <select
+              value={selectedEmployee}
+              onChange={e => setSelectedEmployee(e.target.value)}
+              className="bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-400"
+            >
+              <option value="all">All Employees</option>
+              {allEmployees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.fullName} ({emp.employeeId})
+                </option>
+              ))}
             </select>
 
             <select

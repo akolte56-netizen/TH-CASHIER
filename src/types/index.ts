@@ -3,6 +3,8 @@
  */
 
 export type UserRole = 'cashier' | 'manager' | 'admin';
+export type EmploymentStatus = 'full_time' | 'part_time' | 'contract' | 'probation';
+export type AccountStatus = 'active' | 'inactive' | 'suspended';
 
 export interface EmployeeProfile {
   id: string;
@@ -12,14 +14,30 @@ export interface EmployeeProfile {
   role: UserRole;
   designation: string;
   department: string;
-  outletId: string;
-  outletName: string;
-  profilePhotoUrl?: string;
-  accountStatus: 'active' | 'suspended';
+  outletId: string; // Primary outlet ID
+  outletName: string; // Primary outlet Name
+  assignedOutletIds: string[]; // Supports multiple outlet assignments
+  employmentStatus?: EmploymentStatus;
+  accountStatus: AccountStatus;
   createdAt: string;
   phone?: string;
   emailVerified?: boolean;
   passwordHash?: string;
+  profilePhotoUrl?: string;
+}
+
+export interface OutletEmployeeAssignment {
+  id: string;
+  outletId: string;
+  outletName: string;
+  employeeId: string; // CS-104
+  employeeRefId: string; // employee profile id
+  employeeName: string;
+  designation: string;
+  isPrimary: boolean;
+  assignedAt: string;
+  status: 'active' | 'transferred' | 'removed';
+  notes?: string;
 }
 
 export interface EmailAuthConfig {
@@ -36,6 +54,12 @@ export interface Outlet {
   code: string;
   address: string;
   phone: string;
+  managerName?: string;
+  managerEmployeeId?: string;
+  contactEmail?: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
   timezone: string;
   currency: string;
   currencySymbol: string;

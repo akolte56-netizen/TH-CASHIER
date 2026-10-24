@@ -33,6 +33,7 @@ export const ChecklistRunner: React.FC = () => {
   const {
     currentUser,
     outlets,
+    authorizedOutlets,
     shifts,
     allEmployees,
     activeReport,
@@ -50,8 +51,10 @@ export const ChecklistRunner: React.FC = () => {
     clearActiveChecklist,
   } = useApp();
 
-  // New Checklist Form state (if no active report)
-  const [selectedOutletId, setSelectedOutletId] = useState<string>(currentUser.outletId || outlets[0].id);
+  // New Checklist Form state (if no active report) - Restricted to user's authorized outlets
+  const [selectedOutletId, setSelectedOutletId] = useState<string>(
+    authorizedOutlets[0]?.id || currentUser.outletId || outlets[0]?.id
+  );
   const [selectedShiftType, setSelectedShiftType] = useState<ShiftType>('morning');
   const [selectedChecklistType, setSelectedChecklistType] = useState<ChecklistType>('opening');
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
@@ -253,23 +256,33 @@ export const ChecklistRunner: React.FC = () => {
                 </p>
               </div>
 
-              {/* Restaurant / Outlet */}
+              {/* Restaurant / Outlet (Authorized Selection) */}
               <div className="bg-neutral-950/60 p-4 rounded-xl border border-neutral-800">
-                <label className="block text-[11px] font-medium text-neutral-400 mb-1 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-neutral-400" />
-                  Restaurant Outlet <span className="text-amber-400">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-neutral-400 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-neutral-400" />
+                    Authorized Outlet <span className="text-amber-400">*</span>
+                  </label>
+                  <span className="text-[10px] text-neutral-500 font-mono">
+                    Base: {currentUser.outletName}
+                  </span>
+                </div>
                 <select
                   value={selectedOutletId}
                   onChange={e => setSelectedOutletId(e.target.value)}
                   className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-400"
                 >
-                  {outlets.map(o => (
+                  {authorizedOutlets.map(o => (
                     <option key={o.id} value={o.id}>
-                      {o.name} ({o.code})
+                      {o.name} ({o.code}) {o.id === currentUser.outletId ? '★ Base' : ''}
                     </option>
                   ))}
                 </select>
+                {authorizedOutlets.length === 1 && (
+                  <p className="text-[10px] text-neutral-500 mt-1">
+                    Your profile is assigned exclusively to this branch.
+                  </p>
+                )}
               </div>
 
               {/* Shift Type & Timings */}

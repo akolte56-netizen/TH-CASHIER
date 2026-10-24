@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   EmployeeProfile,
   Outlet,
@@ -16,11 +16,13 @@ import {
   AuditLogEntry,
   UserRole,
   EmailAuthConfig,
+  OutletEmployeeAssignment,
 } from '../types';
 import {
   INITIAL_OUTLETS,
   INITIAL_SHIFTS,
   INITIAL_EMPLOYEES,
+  INITIAL_ASSIGNMENTS,
   INITIAL_CHECKLIST_TEMPLATES,
   INITIAL_REPORTS,
   INITIAL_NOTIFICATIONS,
@@ -55,9 +57,27 @@ interface AppContextType {
   setCurrentUser: (user: EmployeeProfile) => void;
   updateEmployeeProfile: (updated: EmployeeProfile) => void;
   createEmployeeProfile: (newEmp: Omit<EmployeeProfile, 'id' | 'createdAt'>) => EmployeeProfile;
+  toggleEmployeeStatus: (id: string) => void;
+  deleteEmployee: (id: string) => { success: boolean; error?: string };
 
-  // Configuration
+  // Outlets Management
   outlets: Outlet[];
+  addOutlet: (outlet: Omit<Outlet, 'id' | 'createdAt' | 'updatedAt'>) => { success: boolean; outlet?: Outlet; error?: string };
+  updateOutlet: (id: string, updates: Partial<Outlet>) => { success: boolean; error?: string };
+  toggleOutletStatus: (id: string) => void;
+  deleteOutlet: (id: string, force?: boolean) => { success: boolean; error?: string; assignedCount?: number; reportCount?: number };
+
+  // Multi-Outlet & Employee Assignments
+  assignments: OutletEmployeeAssignment[];
+  assignEmployeeToOutlet: (params: { outletId: string; employeeRefId: string; isPrimary?: boolean; notes?: string }) => { success: boolean; error?: string };
+  removeEmployeeFromOutlet: (assignmentId: string) => { success: boolean; error?: string };
+  transferEmployee: (employeeRefId: string, fromOutletId: string, toOutletId: string, notes?: string) => { success: boolean; error?: string };
+  getEmployeesForOutlet: (outletId: string) => EmployeeProfile[];
+  getAssignmentsForOutlet: (outletId: string) => OutletEmployeeAssignment[];
+  getOutletsForEmployee: (employeeRefId: string) => Outlet[];
+  authorizedOutlets: Outlet[];
+
+  // Shifts & Templates Configuration
   shifts: ShiftDefinition[];
   templates: ChecklistItemTemplate[];
   updateTemplateItem: (template: ChecklistItemTemplate) => void;
@@ -105,8 +125,8 @@ interface AppContextType {
   clearAllNotifications: () => void;
 
   // Active tab / navigation
-  activeTab: 'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates';
-  setActiveTab: (tab: 'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates') => void;
+  activeTab: 'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates' | 'outlets' | 'employees';
+  setActiveTab: (tab: 'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates' | 'outlets' | 'employees') => void;
   
   // Selected report for inspection / preview modal
   previewReport: ChecklistReport | null;
@@ -123,6 +143,8 @@ const STORAGE_KEYS = {
   AUTH: 'th_cashier_is_authenticated_v1',
   USER: 'th_cashier_current_user_v1',
   EMPLOYEES: 'th_cashier_employees_v1',
+  OUTLETS: 'th_cashier_outlets_v1',
+  ASSIGNMENTS: 'th_cashier_assignments_v1',
   TEMPLATES: 'th_cashier_templates_v1',
   REPORTS: 'th_cashier_reports_v1',
   ACTIVE_REPORT: 'th_cashier_active_report_v1',
@@ -153,7 +175,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_EMPLOYEES[0]; // Priya Patel by default
   });
 
-  const [outlets] = useState<Outlet[]>(INITIAL_OUTLETS);
+  const [outlets, setOutlets] = useState<Outlet[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.OUTLETS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    }
+    return INITIAL_OUTLETS;
+  });
+
+  const [assignments, setAssignments] = useState<OutletEmployeeAssignment[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    }
+    return INITIAL_ASSIGNMENTS;
+  });
+
   const [shifts] = useState<ShiftDefinition[]>(INITIAL_SHIFTS);
 
   const [templates, setTemplates] = useState<ChecklistItemTemplate[]>(() => {
@@ -176,7 +213,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
-  const [activeTab, setActiveTab] = useState<'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates'>('checklist');
+  const [activeTab, setActiveTab] = useState<'checklist' | 'dashboard' | 'history' | 'approvals' | 'templates' | 'outlets' | 'employees'>('checklist');
   const [previewReport, setPreviewReport] = useState<ChecklistReport | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -189,6 +226,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(allEmployees));
   }, [allEmployees]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.OUTLETS, JSON.stringify(outlets));
+  }, [outlets]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+  }, [assignments]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
@@ -350,6 +395,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       department: data.department || (data.role === 'manager' ? 'Restaurant Management' : 'Front of House Operations'),
       outletId: outlet.id,
       outletName: outlet.name,
+      assignedOutletIds: [outlet.id],
       accountStatus: 'active',
       createdAt: new Date().toISOString(),
       emailVerified: !authConfig.requireEmailVerification,
@@ -357,6 +403,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setAllEmployees(prev => [...prev, newProfile]);
+    setAssignments(prev => [
+      ...prev,
+      {
+        id: 'asn_' + Date.now(),
+        outletId: outlet.id,
+        outletName: outlet.name,
+        employeeId: generatedEmpId,
+        employeeRefId: newProfile.id,
+        employeeName: newProfile.fullName,
+        designation: newProfile.designation,
+        isPrimary: true,
+        assignedAt: new Date().toISOString(),
+        status: 'active',
+      },
+    ]);
     setCurrentUser(newProfile);
     setIsAuthenticated(true);
     localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
@@ -407,17 +468,431 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.id === updated.id) {
       setCurrentUser(updated);
     }
+    // Sync employee names and designations across active assignments
+    setAssignments(prev => prev.map(asn => {
+      if (asn.employeeRefId === updated.id) {
+        return {
+          ...asn,
+          employeeName: updated.fullName,
+          employeeId: updated.employeeId,
+          designation: updated.designation,
+        };
+      }
+      return asn;
+    }));
   };
 
   const createEmployeeProfile = (newEmpData: Omit<EmployeeProfile, 'id' | 'createdAt'>): EmployeeProfile => {
+    const newEmpId = 'emp_' + Date.now();
+    const assignedOutletIds = newEmpData.assignedOutletIds && newEmpData.assignedOutletIds.length > 0 
+      ? newEmpData.assignedOutletIds 
+      : [newEmpData.outletId];
+
     const newEmp: EmployeeProfile = {
       ...newEmpData,
-      id: 'emp_' + Date.now(),
+      id: newEmpId,
+      assignedOutletIds,
       createdAt: new Date().toISOString(),
     };
     setAllEmployees(prev => [...prev, newEmp]);
+
+    // Create assignments for all assignedOutletIds
+    const newAssignments: OutletEmployeeAssignment[] = assignedOutletIds.map((oId, idx) => {
+      const targetOutlet = outlets.find(o => o.id === oId);
+      return {
+        id: 'asn_' + Date.now() + '_' + idx,
+        outletId: oId,
+        outletName: targetOutlet ? targetOutlet.name : newEmp.outletName,
+        employeeId: newEmp.employeeId,
+        employeeRefId: newEmpId,
+        employeeName: newEmp.fullName,
+        designation: newEmp.designation,
+        isPrimary: oId === newEmp.outletId,
+        assignedAt: new Date().toISOString(),
+        status: 'active',
+      };
+    });
+    setAssignments(prev => [...prev, ...newAssignments]);
+    addNotification('Employee Created', `${newEmp.fullName} (${newEmp.employeeId}) registered successfully.`, 'success');
     return newEmp;
   };
+
+  const toggleEmployeeStatus = (id: string) => {
+    setAllEmployees(prev => prev.map(e => {
+      if (e.id === id) {
+        const nextStatus = e.accountStatus === 'active' ? 'inactive' : 'active';
+        addNotification(
+          'Employee Status Updated',
+          `${e.fullName} (${e.employeeId}) is now ${nextStatus.toUpperCase()}.`,
+          nextStatus === 'active' ? 'success' : 'warning'
+        );
+        return { ...e, accountStatus: nextStatus };
+      }
+      return e;
+    }));
+  };
+
+  const deleteEmployee = (id: string): { success: boolean; error?: string } => {
+    const target = allEmployees.find(e => e.id === id);
+    if (!target) return { success: false, error: 'Employee not found.' };
+
+    if (currentUser.id === id) {
+      return { success: false, error: 'You cannot delete your own active account.' };
+    }
+
+    // Protection: check if historical checklist reports exist
+    const linkedReports = reports.filter(r => r.cashierId === target.id || r.cashierEmployeeId === target.employeeId);
+    if (linkedReports.length > 0) {
+      return {
+        success: false,
+        error: `Cannot permanently delete ${target.fullName}: ${linkedReports.length} historical checklist report(s) are signed under this employee ID. Please deactivate this employee instead to preserve historical records.`,
+      };
+    }
+
+    setAllEmployees(prev => prev.filter(e => e.id !== id));
+    setAssignments(prev => prev.filter(a => a.employeeRefId !== id));
+    addNotification('Employee Removed', `${target.fullName} record deleted from system.`, 'info');
+    return { success: true };
+  };
+
+  // Outlet Management
+  const addOutlet = (data: Omit<Outlet, 'id' | 'createdAt' | 'updatedAt'>): { success: boolean; outlet?: Outlet; error?: string } => {
+    const cleanCode = data.code.trim().toUpperCase();
+    if (!cleanCode) {
+      return { success: false, error: 'Outlet code is required.' };
+    }
+    if (!data.name.trim()) {
+      return { success: false, error: 'Outlet name is required.' };
+    }
+    const duplicateCode = outlets.some(o => o.code.toUpperCase() === cleanCode);
+    if (duplicateCode) {
+      return { success: false, error: `Outlet code "${cleanCode}" is already in use by another outlet.` };
+    }
+
+    const newOutlet: Outlet = {
+      ...data,
+      id: 'out_' + Date.now(),
+      code: cleanCode,
+      status: data.status || 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setOutlets(prev => [...prev, newOutlet]);
+    addNotification('Outlet Added', `New outlet "${newOutlet.name}" (${newOutlet.code}) created successfully.`, 'success');
+    return { success: true, outlet: newOutlet };
+  };
+
+  const updateOutlet = (id: string, updates: Partial<Outlet>): { success: boolean; error?: string } => {
+    const existing = outlets.find(o => o.id === id);
+    if (!existing) return { success: false, error: 'Outlet not found.' };
+
+    if (updates.code) {
+      const cleanCode = updates.code.trim().toUpperCase();
+      const duplicateCode = outlets.some(o => o.id !== id && o.code.toUpperCase() === cleanCode);
+      if (duplicateCode) {
+        return { success: false, error: `Outlet code "${cleanCode}" is already in use by another outlet.` };
+      }
+      updates.code = cleanCode;
+    }
+
+    const updatedOutlet = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setOutlets(prev => prev.map(o => o.id === id ? updatedOutlet : o));
+
+    // If outlet name changed, synchronize assignments and employee records
+    if (updates.name && updates.name !== existing.name) {
+      setAssignments(prev => prev.map(a => a.outletId === id ? { ...a, outletName: updates.name! } : a));
+      setAllEmployees(prev => prev.map(e => e.outletId === id ? { ...e, outletName: updates.name! } : e));
+    }
+
+    addNotification('Outlet Updated', `Outlet "${updatedOutlet.name}" details updated.`, 'info');
+    return { success: true };
+  };
+
+  const toggleOutletStatus = (id: string) => {
+    setOutlets(prev => prev.map(o => {
+      if (o.id === id) {
+        const nextStatus = o.status === 'active' ? 'inactive' : 'active';
+        addNotification(
+          'Outlet Status Changed',
+          `Outlet "${o.name}" is now ${nextStatus.toUpperCase()}.`,
+          nextStatus === 'active' ? 'success' : 'warning'
+        );
+        return { ...o, status: nextStatus, updatedAt: new Date().toISOString() };
+      }
+      return o;
+    }));
+  };
+
+  const deleteOutlet = (id: string, force = false): { success: boolean; error?: string; assignedCount?: number; reportCount?: number } => {
+    const target = outlets.find(o => o.id === id);
+    if (!target) return { success: false, error: 'Outlet not found.' };
+
+    const reportCount = reports.filter(r => r.outletId === id).length;
+    const assignedCount = assignments.filter(a => a.outletId === id && a.status === 'active').length;
+
+    if (!force && reportCount > 0) {
+      return {
+        success: false,
+        error: `Cannot delete "${target.name}": ${reportCount} checklist report(s) are recorded for this outlet. Please deactivate the outlet instead to preserve historical records.`,
+        reportCount,
+        assignedCount,
+      };
+    }
+
+    setOutlets(prev => prev.filter(o => o.id !== id));
+    setAssignments(prev => prev.filter(a => a.outletId !== id));
+    // Remove outletId from employees' assignedOutletIds
+    setAllEmployees(prev => prev.map(e => {
+      const remaining = (e.assignedOutletIds || []).filter(oId => oId !== id);
+      const isPrimaryLost = e.outletId === id;
+      const fallbackOutlet = outlets.find(o => o.id !== id) || { id: '', name: '' };
+      return {
+        ...e,
+        assignedOutletIds: remaining,
+        outletId: isPrimaryLost ? fallbackOutlet.id : e.outletId,
+        outletName: isPrimaryLost ? fallbackOutlet.name : e.outletName,
+      };
+    }));
+
+    addNotification('Outlet Deleted', `Outlet "${target.name}" and associated assignments removed.`, 'info');
+    return { success: true };
+  };
+
+  // Multi-Outlet & Assignment Operations
+  const assignEmployeeToOutlet = (params: {
+    outletId: string;
+    employeeRefId: string;
+    isPrimary?: boolean;
+    notes?: string;
+  }): { success: boolean; error?: string } => {
+    const targetOutlet = outlets.find(o => o.id === params.outletId);
+    if (!targetOutlet) return { success: false, error: 'Target outlet does not exist.' };
+
+    const targetEmp = allEmployees.find(e => e.id === params.employeeRefId);
+    if (!targetEmp) return { success: false, error: 'Employee record not found.' };
+
+    // Prevent duplicate active assignments to the same outlet
+    const alreadyAssigned = assignments.some(
+      a => a.outletId === params.outletId && a.employeeRefId === params.employeeRefId && a.status === 'active'
+    );
+    if (alreadyAssigned) {
+      return { success: false, error: `${targetEmp.fullName} is already actively assigned to ${targetOutlet.name}.` };
+    }
+
+    const newAssignment: OutletEmployeeAssignment = {
+      id: 'asn_' + Date.now(),
+      outletId: params.outletId,
+      outletName: targetOutlet.name,
+      employeeId: targetEmp.employeeId,
+      employeeRefId: targetEmp.id,
+      employeeName: targetEmp.fullName,
+      designation: targetEmp.designation,
+      isPrimary: Boolean(params.isPrimary),
+      assignedAt: new Date().toISOString(),
+      status: 'active',
+      notes: params.notes,
+    };
+
+    setAssignments(prev => [...prev, newAssignment]);
+
+    // Update employee profile's assignedOutletIds
+    setAllEmployees(prev => prev.map(e => {
+      if (e.id === params.employeeRefId) {
+        const set = new Set([...(e.assignedOutletIds || []), params.outletId]);
+        return {
+          ...e,
+          assignedOutletIds: Array.from(set),
+          ...(params.isPrimary ? { outletId: targetOutlet.id, outletName: targetOutlet.name } : {}),
+        };
+      }
+      return e;
+    }));
+
+    if (currentUser.id === targetEmp.id && params.isPrimary) {
+      setCurrentUser(prev => ({
+        ...prev,
+        outletId: targetOutlet.id,
+        outletName: targetOutlet.name,
+        assignedOutletIds: Array.from(new Set([...(prev.assignedOutletIds || []), params.outletId])),
+      }));
+    }
+
+    addNotification(
+      'Assignment Added',
+      `${targetEmp.fullName} (${targetEmp.employeeId}) assigned to ${targetOutlet.name}.`,
+      'success'
+    );
+    return { success: true };
+  };
+
+  const removeEmployeeFromOutlet = (assignmentId: string): { success: boolean; error?: string } => {
+    const asn = assignments.find(a => a.id === assignmentId);
+    if (!asn) return { success: false, error: 'Assignment not found.' };
+
+    // Remove assignment
+    setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+
+    // Remove from employee's assignedOutletIds
+    setAllEmployees(prev => prev.map(e => {
+      if (e.id === asn.employeeRefId) {
+        const remaining = (e.assignedOutletIds || []).filter(oId => oId !== asn.outletId);
+        let nextPrimaryId = e.outletId;
+        let nextPrimaryName = e.outletName;
+
+        if (e.outletId === asn.outletId) {
+          const nextOutlet = outlets.find(o => remaining.includes(o.id)) || outlets[0];
+          nextPrimaryId = nextOutlet?.id || '';
+          nextPrimaryName = nextOutlet?.name || '';
+        }
+
+        return {
+          ...e,
+          assignedOutletIds: remaining,
+          outletId: nextPrimaryId,
+          outletName: nextPrimaryName,
+        };
+      }
+      return e;
+    }));
+
+    addNotification(
+      'Assignment Removed',
+      `Removed ${asn.employeeName} assignment from ${asn.outletName}. (Account preserved)`,
+      'info'
+    );
+    return { success: true };
+  };
+
+  const transferEmployee = (
+    employeeRefId: string,
+    fromOutletId: string,
+    toOutletId: string,
+    notes?: string
+  ): { success: boolean; error?: string } => {
+    if (fromOutletId === toOutletId) {
+      return { success: false, error: 'Source and destination outlets cannot be identical.' };
+    }
+
+    const sourceOutlet = outlets.find(o => o.id === fromOutletId);
+    const destOutlet = outlets.find(o => o.id === toOutletId);
+    const emp = allEmployees.find(e => e.id === employeeRefId);
+
+    if (!sourceOutlet || !destOutlet || !emp) {
+      return { success: false, error: 'Invalid outlet or employee transfer reference.' };
+    }
+
+    // Check if already active at destination
+    const alreadyAtDest = assignments.some(
+      a => a.outletId === toOutletId && a.employeeRefId === employeeRefId && a.status === 'active'
+    );
+
+    // Update old assignment to transferred
+    setAssignments(prev => {
+      const updated = prev.map(a => {
+        if (a.outletId === fromOutletId && a.employeeRefId === employeeRefId && a.status === 'active') {
+          return { ...a, status: 'transferred' as const, notes: `Transferred to ${destOutlet.name}: ${notes || ''}` };
+        }
+        return a;
+      });
+
+      if (!alreadyAtDest) {
+        const newAsn: OutletEmployeeAssignment = {
+          id: 'asn_' + Date.now(),
+          outletId: toOutletId,
+          outletName: destOutlet.name,
+          employeeId: emp.employeeId,
+          employeeRefId: emp.id,
+          employeeName: emp.fullName,
+          designation: emp.designation,
+          isPrimary: true,
+          assignedAt: new Date().toISOString(),
+          status: 'active',
+          notes: `Transferred from ${sourceOutlet.name}: ${notes || ''}`,
+        };
+        return [...updated, newAsn];
+      }
+      return updated;
+    });
+
+    // Update employee profile
+    setAllEmployees(prev => prev.map(e => {
+      if (e.id === employeeRefId) {
+        const nextAssigned = Array.from(new Set([
+          ...(e.assignedOutletIds || []).filter(id => id !== fromOutletId),
+          toOutletId
+        ]));
+        return {
+          ...e,
+          assignedOutletIds: nextAssigned,
+          outletId: destOutlet.id,
+          outletName: destOutlet.name,
+        };
+      }
+      return e;
+    }));
+
+    if (currentUser.id === employeeRefId) {
+      setCurrentUser(prev => ({
+        ...prev,
+        outletId: destOutlet.id,
+        outletName: destOutlet.name,
+        assignedOutletIds: Array.from(new Set([
+          ...(prev.assignedOutletIds || []).filter(id => id !== fromOutletId),
+          toOutletId
+        ])),
+      }));
+    }
+
+    addNotification(
+      'Employee Transferred',
+      `${emp.fullName} was transferred from ${sourceOutlet.name} to ${destOutlet.name}.`,
+      'success'
+    );
+    return { success: true };
+  };
+
+  const getEmployeesForOutlet = (outletId: string): EmployeeProfile[] => {
+    const activeEmpIds = new Set(
+      assignments.filter(a => a.outletId === outletId && a.status === 'active').map(a => a.employeeRefId)
+    );
+    return allEmployees.filter(e => activeEmpIds.has(e.id) || (e.assignedOutletIds && e.assignedOutletIds.includes(outletId)));
+  };
+
+  const getAssignmentsForOutlet = (outletId: string): OutletEmployeeAssignment[] => {
+    return assignments.filter(a => a.outletId === outletId && a.status === 'active');
+  };
+
+  const getOutletsForEmployee = (employeeRefId: string): Outlet[] => {
+    const emp = allEmployees.find(e => e.id === employeeRefId);
+    if (!emp) return [];
+    const outletIds = new Set(emp.assignedOutletIds || [emp.outletId]);
+    return outlets.filter(o => outletIds.has(o.id));
+  };
+
+  // Compute authorized outlets for current user
+  const authorizedOutlets = useMemo(() => {
+    if (currentUser.role === 'admin') {
+      return outlets.filter(o => o.status === 'active');
+    }
+    if (currentUser.role === 'manager') {
+      const managerOutletIds = new Set([
+        ...(currentUser.assignedOutletIds || [currentUser.outletId]),
+        ...outlets.filter(o => o.managerName === currentUser.fullName || o.managerEmployeeId === currentUser.employeeId).map(o => o.id)
+      ]);
+      const allowed = outlets.filter(o => managerOutletIds.has(o.id) && o.status === 'active');
+      return allowed.length > 0 ? allowed : outlets.filter(o => o.status === 'active');
+    }
+    // Cashier
+    const cashierOutletIds = new Set(currentUser.assignedOutletIds || [currentUser.outletId]);
+    const allowed = outlets.filter(o => cashierOutletIds.has(o.id) && o.status === 'active');
+    return allowed.length > 0 ? allowed : [outlets.find(o => o.id === currentUser.outletId) || outlets[0]];
+  }, [currentUser, outlets]);
 
   // Template management
   const updateTemplateItem = (updatedTemplate: ChecklistItemTemplate) => {
@@ -942,7 +1417,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser,
         updateEmployeeProfile,
         createEmployeeProfile,
+        toggleEmployeeStatus,
+        deleteEmployee,
         outlets,
+        addOutlet,
+        updateOutlet,
+        toggleOutletStatus,
+        deleteOutlet,
+        assignments,
+        assignEmployeeToOutlet,
+        removeEmployeeFromOutlet,
+        transferEmployee,
+        getEmployeesForOutlet,
+        getAssignmentsForOutlet,
+        getOutletsForEmployee,
+        authorizedOutlets,
         shifts,
         templates,
         updateTemplateItem,

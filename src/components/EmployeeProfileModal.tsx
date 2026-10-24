@@ -77,6 +77,7 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({ isOp
       department: newDept,
       outletId: outlet.id,
       outletName: outlet.name,
+      assignedOutletIds: [outlet.id],
       accountStatus: 'active',
       phone: '+1 (555) 000-0000',
     });

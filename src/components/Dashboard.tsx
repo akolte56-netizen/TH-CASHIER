@@ -12,7 +12,8 @@ import {
   Building2, 
   ShieldCheck, 
   Play,
-  RotateCcw
+  RotateCcw,
+  Users
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ChecklistType } from '../types';
@@ -223,6 +224,53 @@ export const Dashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Outlets & Staff Quick Management */}
+      {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-colors hover:border-neutral-700">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Restaurant Outlets</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {outlets.length} properties configured · Manage branches & operational statuses
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('outlets')}
+              className="px-3.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+            >
+              <span>Manage</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 transition-colors hover:border-neutral-700">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Employee Rosters</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {allEmployees.length} registered staff · Assign multi-outlet authorizations & roles
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('employees')}
+              className="px-3.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+            >
+              <span>Manage</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Recent Activity & Reports Table */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-lg">
