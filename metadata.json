@@ -1,0 +1,6 @@
+{
+  "name": "th Cashier - Restaurant Operations & Checklist Management",
+  "description": "Professional restaurant cashier checklist management system covering opening, mid-shift, handover, and closing operations with camera proof, cash reconciliation, manager approvals, and audit logs.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
