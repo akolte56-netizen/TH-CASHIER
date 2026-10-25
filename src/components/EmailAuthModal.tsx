@@ -34,6 +34,7 @@ export const EmailAuthModal: React.FC<EmailAuthModalProps> = ({
 }) => {
   const {
     loginWithEmail,
+    loginWithGoogleEmail,
     registerWithEmail,
     sendPasswordReset,
     resetPasswordWithToken,

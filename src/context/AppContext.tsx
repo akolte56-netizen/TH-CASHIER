@@ -35,6 +35,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   logout: () => void;
   loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string; profile?: EmployeeProfile }>;
+  loginWithGoogleEmail: () => Promise<{ success: boolean; error?: string; profile?: EmployeeProfile }>;
   registerWithEmail: (data: {
     email: string;
     password: string;
@@ -349,6 +350,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAuthenticated(true);
     localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
     addNotification('Login Successful', `Welcome back, ${matched.fullName}! Authenticated via email.`, 'success');
+    return { success: true, profile: matched };
+  };
+
+  const loginWithGoogleEmail = async (): Promise<{ success: boolean; error?: string; profile?: EmployeeProfile }> => {
+    return new Promise((resolve) => {
+      if (!window.google || !window.google.accounts) {
+        resolve({ success: false, error: "Google Sign-In script not loaded. Please refresh the page." });
+        return;
+      }
+
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+        scope: "email profile",
+        callback: async (response: any) => {
+          if (response.error) {
+            resolve({ success: false, error: response.error_description || "Google authentication failed." });
+            return;
+          }
+
+          try {
+            const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${response.access_token}` },
+            });
+            const googleUser = await userInfoRes.json();
+            const verifiedEmail = googleUser.email;
+
+            if (!verifiedEmail) {
+              resolve({ success: false, error: "Could not retrieve email from Google account." });
+              return;
+            }
+
+            const matchedEmployee = allEmployees.find(
+              (emp) => emp.email.toLowerCase() === verifiedEmail.toLowerCase()
+            );
+
+            if (!matchedEmployee) {
+              resolve({ 
+                success: false, 
+                error: `Email ${verifiedEmail} is not registered in the system. Please contact your manager.` 
+              });
+              return;
+            }
+
+            if (matchedEmployee.status !== "ACTIVE") {
+              resolve({ 
+                success: false, 
+                error: "Your account is currently inactive. Please contact the administrator." 
+              });
+              return;
+            }
+
+            setCurrentUser(matchedEmployee);
+            setIsAuthenticated(true);
+            resolve({ success: true, profile: matchedEmployee });
+
+          } catch (err) {
+            resolve({ success: false, error: "Failed to fetch user profile from Google." });
+          }
+        },
+      });
+
+      client.requestAccessToken();
+    });
+  
+    const cleanEmail = email.trim().toLowerCase();
+    const matched = allEmployees.find(employee => employee.email.trim().toLowerCase() === cleanEmail);
+    if (!matched) return { success: false, error: "No employee account is registered with this Google email." };
+    if (matched.accountStatus !== "active") return { success: false, error: "This employee account is inactive or suspended. Contact your administrator." };
+    setCurrentUser(matched);
+    setIsAuthenticated(true);
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(matched));
+    localStorage.setItem(STORAGE_KEYS.AUTH, "true");
+    addNotification("Login Successful", `Welcome back, ${matched.fullName}! Authenticated via Google.`, "success");
     return { success: true, profile: matched };
   };
 
@@ -1406,6 +1480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAuthenticated,
         logout,
         loginWithEmail,
+        loginWithGoogleEmail,
         registerWithEmail,
         sendPasswordReset,
         resetPasswordWithToken,
