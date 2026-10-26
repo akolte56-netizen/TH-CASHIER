@@ -6,6 +6,8 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    // Expose only public browser-safe vars (Vercel's Supabase integration uses NEXT_PUBLIC_*)
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -32,19 +32,25 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Stop camera tracks helper
+  // Stop camera tracks helper (ref-based so this callback never changes)
+  const streamRef = useRef<MediaStream | null>(null);
+  const startReqRef = useRef(0);
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+    startReqRef.current += 1;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
-  }, [stream]);
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setStream(null);
+  }, []);
 
   // Start camera stream
   const startCamera = useCallback(async () => {
     setIsInitializing(true);
     setCameraError(null);
     stopCamera();
+    const reqId = ++startReqRef.current;
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -60,6 +66,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         audio: false,
       });
 
+      if (reqId !== startReqRef.current) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -92,6 +103,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       stopCamera();
     };
   }, [isOpen, facingMode, capturedImage, startCamera, stopCamera]);
+
+  // Re-attach the live stream whenever the <video> element is (re)mounted
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && stream && video.srcObject !== stream) {
+      video.srcObject = stream;
+      video.play().catch(() => {});
+    }
+  }, [stream, capturedImage, cameraError]);
 
   // Flip camera (front/back)
   const toggleFacingMode = () => {
@@ -127,6 +147,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   // Take photo from video stream
   const handleCaptureFromVideo = () => {
     if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current.videoWidth) return; // camera not ready yet
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -198,7 +219,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   const handleRetake = () => {
     setCapturedImage(null);
-    startCamera();
   };
 
   const handleConfirm = () => {
